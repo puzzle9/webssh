@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ESNext",
+    "sourceMap": false,
+    "allowSyntheticDefaultImports": true
+  },
+  "files": [
+    "main.ts",
+    "main.d.ts"
+  ]
+}

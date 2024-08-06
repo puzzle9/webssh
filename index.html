@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-cmn-Hans">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>webssh</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.4.35/dist/vue.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+    <style>
+        .terminal {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="buttons">
+        <button v-show="!socket_is_connect" @click="socketConnect">连接</button>
+        <button v-show="socket_is_connect" @click="socketClose">断开</button>
+    </div>
+    <div ref="terminal_ref" class="terminal"></div>
+</div>
+<script type="module">
+    const SOCKET_URL = window.location.origin,
+        SOCKET_PATH = '/io',
+        SOCKET_TOKEN = 'token'
+
+    Vue.createApp({
+        setup() {
+            const terminal_ref = Vue.ref(),
+                terminal = new Terminal({
+                    allowProposedApi: true,
+                    cursorBlink: true,
+                }),
+                terminal_fitAddon = new FitAddon.FitAddon(),
+                terminalInit = () => {
+                    // 此处调用顺序很重要
+                    terminal.loadAddon(terminal_fitAddon)
+                    terminal.onResize(({cols, rows}) => {
+                        log(`resize cols: ${cols} rows: ${rows}`)
+                        socket?.emit('resize', {
+                            cols,
+                            rows,
+                        })
+                    })
+                    terminal.open(terminal_ref.value)
+                    terminal_fitAddon.fit()
+                    terminal.write('hello word: \r\n')
+                    log('hi')
+                    terminal.onData((value) => socket.emit('terminal', value.toString('binary')))
+                }
+
+            Vue.onMounted(() => {
+                terminalInit()
+                window.addEventListener('resize', () => terminal_fitAddon.fit(), false);
+            })
+
+            const log = (message) => {
+                let msg = `${(new Date).toLocaleString()}: ${message}`
+                console.log(msg)
+                terminal.write(`${msg} \r\n`)
+            }
+
+            let socket = null
+            const socket_is_connect = Vue.ref(false)
+
+            const socketConnect = () => {
+                    log('正在连接 socket')
+
+                    if (socket?.connected) {
+                        log('socket 已连过了')
+                        return
+                    }
+
+                    socket = io(SOCKET_URL, {
+                        path: SOCKET_PATH,
+                        auth: {
+                            token: SOCKET_TOKEN,
+                        }
+                    })
+
+                    socket.on('connect', () => {
+                        socket_is_connect.value = true
+                        log(`socket 连接成功 ${socket.id}`)
+                    })
+
+                    socket.on('connect_error', (err) => {
+                        socket_is_connect.value = false
+                        console.error(err)
+                        log(`socket 连接失败 ${err}`)
+                    })
+
+                    socket.on('disconnect', (err) => {
+                        socket_is_connect.value = false
+                        console.error(err)
+                        log(`socket 断开连接 ${err}`)
+                    })
+
+                    socket.on('log', (data) => log(data))
+
+                    socket.on('terminal', (data) => terminal.write(data))
+                },
+                socketClose = () => {
+                    socket?.close()
+                    log(`socket 断开成功`)
+                }
+
+            return {
+                terminal_ref,
+                socket_is_connect,
+                socketConnect,
+                socketClose,
+            }
+        }
+    }).mount('#app')
+</script>
+</body>
+</html>
